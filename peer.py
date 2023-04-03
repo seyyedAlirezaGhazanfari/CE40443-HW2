@@ -1,14 +1,16 @@
 from socket import *
 import argparse
 from threading import Thread
-import time, sched
+import time
 import pickle
 import random
 import json
+import os
 
 list_of_trackers = []
 files = [];
 BUFFER_SIZE = 1024
+server_socket = None
 
 def run_client(address, tracker_address, file_name, method):
     handle_client(address, tracker_address, file_name, method)
@@ -31,9 +33,7 @@ def upload_file(connection, request, cli_address):
     connection.close()
     exit(0)
 
-def send_udp_request(tracker_ip, tracker_port, ip, port, msg):
-    client_socket = socket(AF_INET, SOCK_DGRAM)
-    client_socket.bind((ip, int(port)))
+def send_udp_request(tracker_ip, tracker_port, client_socket, msg):
     client_socket.sendto(msg.encode(), (tracker_ip, int(tracker_port)))
     if not (tracker_ip, tracker_port) in list_of_trackers:
         list_of_trackers.append((tracker_ip, tracker_port))
@@ -43,19 +43,32 @@ def send_udp_request(tracker_ip, tracker_port, ip, port, msg):
     return result_msg
 
 def download_send_udp_request(tracker_ip, tracker_port, ip, port, msg):
-    result_msg = send_udp_request(tracker_ip, tracker_port, ip, port, msg)
-    if result_msg != 'FAILED':
-        list_of_seeders_bytes, file_size = result_msg
+    print('start download processing')
+
+    client_socket = socket(AF_INET, SOCK_DGRAM)
+    client_socket.bind((ip, int(port)))
+    result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg)
+    
+    print(result_msg)
+
+    if not result_msg.startswith('error'):
+        list_of_seeders, file_size = json.loads(result_msg)
+        
         print('file_size = ' + file_size)
-        list_of_seeders = json.loads(list_of_seeders_bytes)
-        host_ip, host_port = random.sample(list_of_seeders, 1)
+        
+        host_ip, host_port = random.sample(list_of_seeders, 1)[0]
+        
+        print('start download from ' + host_ip + ':' + str(host_port))
+        
         client_socket = socket(AF_INET, SOCK_STREAM)
-        client_socket.bind((ip, port))
+        client_socket.bind((ip, int(port)))
         client_socket.connect((host_ip, host_port))
-        client_socket.send('download ' + file_name)
-        data, server_address = client_socket.recvfrom(BUFFER_SIZE)
-        print('server address = ' + server_address[0] + ':' + server_address[1])
+        client_socket.send(('download ' + file_name).encode())
+        data, _ = client_socket.recvfrom(BUFFER_SIZE)
         data = data.decode()
+        
+        print('finish downloading')
+
         if not data.startswith('error'):
             try:
                 with open('./downloads/'+file_name, 'w') as f:
@@ -74,14 +87,18 @@ def download_send_udp_request(tracker_ip, tracker_port, ip, port, msg):
         print('error failed_track_file')
         exit(-1)
     
-def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg):
-    result_msg = send_udp_request(tracker_ip, tracker_port, ip, port, msg)    
+def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg, file_name):
+    client_socket = socket(AF_INET, SOCK_DGRAM)
+    result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg)    
+    client_socket.close()
+    print(result_msg)
     if result_msg == 'OK':
+        files.append(file_name)
         server_socket = socket(AF_INET, SOCK_STREAM)
         server_socket.bind((ip, int(port)))
         server_socket.listen(5)
         while True:
-            connection, client_address = server_socket.accept()
+            connection, _ = server_socket.accept()
             while True:
                 request, cli_address = connection.recvfrom(BUFFER_SIZE)
                 request = request.decode()
@@ -94,9 +111,9 @@ def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg):
 
 def alive_report(ip, port, tracker_ip, tracker_port):
     msg = 'alive ' + ip + ' ' + port
-    print('report')
-    print(msg)
-    send_udp_request(tracker_ip, tracker_port, ip, port, msg)
+    client_socket = socket(AF_INET, SOCK_DGRAM)
+    # should we bind it?
+    send_udp_request(tracker_ip, tracker_port, client_socket, msg)
 
 def handle_client(address:str, tracker_address:str, file_name:str, method:str):
     tracker_ip, tracker_port = tracker_address.split(':')
@@ -106,7 +123,12 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
         download_send_udp_request(tracker_ip, tracker_port, ip, port, msg='get ' + file_name)
 
     elif method == 'share':
-        upload_send_udp_request(tracker_ip, tracker_port, ip, port, 'share ' + file_name)
+        upload_send_udp_request(tracker_ip,
+                                 tracker_port,
+                                   ip, port,
+                                     'share ' + file_name + ' ' + str(os.stat('./files/' + file_name).st_size) + ' ' + ip + ':' + port,
+                                     file_name
+                                     )
         
     else:
         print('ERROR')
@@ -114,7 +136,10 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
 
 def handle_inputs():
     while True:
-        print(list_of_trackers)
+        cmd = input().split(' ')
+        if cmd[0] == 'finish':
+            server_socket.close()
+            return
 
 def heartbeat(my_ip, my_port):
     while True:
