@@ -1,0 +1,22 @@
+peer
+    inputs:
+        finish: close server socket if it was open - kill all threads
+    sending requests:
+        get <file_name>
+        share <file_name> <file_size>
+        alive <ip:port>
+        success <file_name> <sender> <receiver>
+        failed <file_name> <sender> <receiver>
+    receive requests:
+        download <file_name>
+        upload <file_name>
+
+
+tracker
+    inputs:
+        finish: close server socket if it was open - kill all threads
+    sending requests:
+    receive requests:
+        get <file_name> -> (list_of_seeders, file_size)
+        share <file_name> <file_size> -> OK | ERROR
+        alive <ip:port>

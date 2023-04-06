@@ -1,134 +1,29 @@
 from socket import *
 import argparse
 from threading import Thread
-import time
-import pickle
-import random
-import json
 import os
+from peer_downloader import download_send_udp_request
+from peer_uploader import upload_send_udp_request
+from utils import heartbeat
 
-list_of_trackers = []
-files = [];
-BUFFER_SIZE = 1024
-server_socket = None
-
-def run_client(address, tracker_address, file_name, method):
-    handle_client(address, tracker_address, file_name, method)
-
-def upload_file(connection, request, cli_address):
-    if request.split(' ')[0] == 'download':
-        file_name = request.split(' ')[1]
-        if file_name in files:
-            try:
-                with open('./files/' + file_name, 'r') as f:
-                    connection.send(f.read(BUFFER_SIZE).encode())
-            except:
-                connection.send('error file_load')
-        else:
-            print('we do not have this file')
-            connection.send('error wrong_file'.encode())
-    else:
-        print('ruined request from ' + cli_address[0] + ':' + cli_address[1])
-        connection.send('error wrong_syntax_request'.encode())
-    connection.close()
-    exit(0)
-
-def send_udp_request(tracker_ip, tracker_port, client_socket, msg):
-    client_socket.sendto(msg.encode(), (tracker_ip, int(tracker_port)))
-    if not (tracker_ip, tracker_port) in list_of_trackers:
-        list_of_trackers.append((tracker_ip, tracker_port))
-    result_msg, _ = client_socket.recvfrom(BUFFER_SIZE)
-    client_socket.close()
-    result_msg = result_msg.decode()
-    return result_msg
-
-def download_send_udp_request(tracker_ip, tracker_port, ip, port, msg):
-    print('start download processing')
-
-    client_socket = socket(AF_INET, SOCK_DGRAM)
-    client_socket.bind((ip, int(port)))
-    result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg)
+files = []
+request_logs = []
     
-    print(result_msg)
-
-    if not result_msg.startswith('error'):
-        list_of_seeders, file_size = json.loads(result_msg)
-        
-        print('file_size = ' + file_size)
-        
-        host_ip, host_port = random.sample(list_of_seeders, 1)[0]
-        
-        print('start download from ' + host_ip + ':' + str(host_port))
-        
-        client_socket = socket(AF_INET, SOCK_STREAM)
-        client_socket.bind((ip, int(port)))
-        client_socket.connect((host_ip, host_port))
-        client_socket.send(('download ' + file_name).encode())
-        data, _ = client_socket.recvfrom(BUFFER_SIZE)
-        data = data.decode()
-        
-        print('finish downloading')
-
-        if not data.startswith('error'):
-            try:
-                with open('./downloads/'+file_name, 'w') as f:
-                    f.write(data)
-                    f.flush()
-                    f.close
-            except:
-                print('error writing_file')
-                client_socket.close()
-                exit(-1)
-        else:
-            client_socket.close()
-            print('error fail_in_downloading')
-            exit(-1)
-    else:
-        print('error failed_track_file')
-        exit(-1)
-    
-def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg, file_name):
-    client_socket = socket(AF_INET, SOCK_DGRAM)
-    result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg)    
-    client_socket.close()
-    print(result_msg)
-    if result_msg == 'OK':
-        files.append(file_name)
-        server_socket = socket(AF_INET, SOCK_STREAM)
-        server_socket.bind((ip, int(port)))
-        server_socket.listen(5)
-        while True:
-            connection, _ = server_socket.accept()
-            while True:
-                request, cli_address = connection.recvfrom(BUFFER_SIZE)
-                request = request.decode()
-                new_thread = Thread(target=upload_file, args=(connection, request, cli_address))
-                new_thread.start()
-    else:
-        print('error registering_on_tracker')
-        exit(-1)
 
 
-def alive_report(ip, port, tracker_ip, tracker_port):
-    msg = 'alive ' + ip + ' ' + port
-    client_socket = socket(AF_INET, SOCK_DGRAM)
-    # should we bind it?
-    send_udp_request(tracker_ip, tracker_port, client_socket, msg)
 
 def handle_client(address:str, tracker_address:str, file_name:str, method:str):
     tracker_ip, tracker_port = tracker_address.split(':')
     ip, port = address.split(':')
 
     if method == 'get':
-        download_send_udp_request(tracker_ip, tracker_port, ip, port, msg='get ' + file_name)
+        download_send_udp_request(tracker_ip, tracker_port, ip, port, 'get ' + file_name, file_name, files)
 
     elif method == 'share':
-        upload_send_udp_request(tracker_ip,
-                                 tracker_port,
-                                   ip, port,
-                                     'share ' + file_name + ' ' + str(os.stat('./files/' + file_name).st_size) + ' ' + ip + ':' + port,
-                                     file_name
-                                     )
+        upload_send_udp_request(tracker_ip, tracker_port, ip, port,
+                                'share ' + file_name + ' ' + str(os.stat('./files/' + file_name).st_size),
+                                file_name, files
+                                )
         
     else:
         print('ERROR')
@@ -137,15 +32,12 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
 def handle_inputs():
     while True:
         cmd = input().split(' ')
-        if cmd[0] == 'finish':
-            server_socket.close()
-            return
+        if cmd[0] == 'request':
+            print(request_logs)
+        else:
+            print('error in command')
 
-def heartbeat(my_ip, my_port):
-    while True:
-        time.sleep(10)
-        for ip, port in list_of_trackers:
-            alive_report(my_ip, my_port, ip, port)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('method')
@@ -160,10 +52,10 @@ tracker_address = args.tracker_address
 
 ip, port = address.split(':')
 
-new_thread = Thread(target=run_client, args=(address, tracker_address, file_name, method))
+new_thread = Thread(target=handle_inputs)
 new_thread.start()
-
-new_thread_2 = Thread(target=heartbeat, args=(ip, port))
+new_thread_2 = Thread(target=heartbeat, args=(ip, port, tracker_address.split(':')[0], tracker_address.split(':')[1]))
 new_thread_2.start()
 
-handle_inputs()
+handle_client(address, tracker_address, file_name, method)
+
