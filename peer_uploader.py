@@ -4,7 +4,7 @@ from utils import BUFFER_SIZE, send_udp_request, run_file_sharing_server, heartb
 
 
 
-def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg, file_name, files):
+def upload_send_udp_request(request_logs, tracker_ip, tracker_port, ip, port, msg, file_name, files):
     client_socket = socket(AF_INET, SOCK_DGRAM)
     try:
         client_socket.bind((ip, int(port)))
@@ -12,6 +12,7 @@ def upload_send_udp_request(tracker_ip, tracker_port, ip, port, msg, file_name, 
         print('busy address')
         return
     result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg, ip, port)  
+    request_logs.append(result_msg)
     if result_msg == 'OK':
         run_file_sharing_server(files, file_name, ip, port, tracker_ip, tracker_port)
     else:

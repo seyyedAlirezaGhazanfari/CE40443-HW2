@@ -11,7 +11,7 @@ def download_send_udp_request(request_logs, tracker_ip, tracker_port, ip, port, 
     client_socket = socket(AF_INET, SOCK_DGRAM)
     client_socket.bind((ip, int(port)))
     result_msg = send_udp_request(tracker_ip, tracker_port, client_socket, msg, ip, port)
-
+    request_logs.append(result_msg)
     if not result_msg.startswith('error'):
         
         list_of_seeders, file_size = json.loads(result_msg)

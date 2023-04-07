@@ -8,6 +8,8 @@ from utils import heartbeat
 
 files = []
 request_logs = []
+
+FILE_DIR = './files/'
     
 
 
@@ -20,12 +22,12 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
         download_send_udp_request(request_logs, tracker_ip, tracker_port, ip, port, 'get ' + file_name, file_name, files)
 
     elif method == 'share':
-        path = './files/' + file_name
+        path = FILE_DIR + file_name
         if not os.path.exists(path):
             print('no such file')
             return
-        upload_send_udp_request(tracker_ip, tracker_port, ip, port,
-                                'share ' + file_name + ' ' + str(os.stat('./files/' + file_name).st_size),
+        upload_send_udp_request(request_logs, tracker_ip, tracker_port, ip, port,
+                                'share ' + file_name + ' ' + str(os.stat(FILE_DIR + file_name).st_size),
                                 file_name, files
                                 )
         
