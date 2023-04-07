@@ -17,9 +17,13 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
     ip, port = address.split(':')
 
     if method == 'get':
-        download_send_udp_request(tracker_ip, tracker_port, ip, port, 'get ' + file_name, file_name, files)
+        download_send_udp_request(request_logs, tracker_ip, tracker_port, ip, port, 'get ' + file_name, file_name, files)
 
     elif method == 'share':
+        path = './files/' + file_name
+        if not os.path.exists(path):
+            print('no such file')
+            return
         upload_send_udp_request(tracker_ip, tracker_port, ip, port,
                                 'share ' + file_name + ' ' + str(os.stat('./files/' + file_name).st_size),
                                 file_name, files
@@ -32,8 +36,10 @@ def handle_client(address:str, tracker_address:str, file_name:str, method:str):
 def handle_inputs():
     while True:
         cmd = input().split(' ')
-        if cmd[0] == 'request':
+        if cmd[0] == 'request' and cmd[1] == 'logs':
             print(request_logs)
+        elif cmd[0] == 'finish':
+            return
         else:
             print('error in command')
 
@@ -54,8 +60,7 @@ ip, port = address.split(':')
 
 new_thread = Thread(target=handle_inputs)
 new_thread.start()
-new_thread_2 = Thread(target=heartbeat, args=(ip, port, tracker_address.split(':')[0], tracker_address.split(':')[1]))
-new_thread_2.start()
+
 
 handle_client(address, tracker_address, file_name, method)
 
