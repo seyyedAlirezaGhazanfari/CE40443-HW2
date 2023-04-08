@@ -62,5 +62,6 @@ def run_file_sharing_server(files, file_name, ip, port, tracker_ip, tracker_port
     server_socket.listen(NUMBER_OF_CONNECTIONS)
     while True:
         connection, client_address = server_socket.accept()
+        connection.setblocking(False)
         new_thread = Thread(target=hanle_tcp_client, args=(connection, client_address, files))
         new_thread.start()
